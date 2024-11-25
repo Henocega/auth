@@ -7,6 +7,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/Henocega/auth/internal/config"
 	"github.com/Henocega/auth/internal/config/env"
 	user "github.com/Henocega/auth/pkg/user_v1"
@@ -21,21 +23,29 @@ import (
 
 const userTable = "\"user\""
 
+const idColumn = "id"
+const emailColumn = "email"
+const nameColumn = "name"
+const roleColumn = "role"
+const passwordColumn = "password"
+const createdAtColumn = "created_at"
+const updatedAtColumn = "updated_at"
+
 type server struct {
 	user.UnimplementedUserV1Server
 	pool *pgxpool.Pool
 }
 
 func (s *server) Get(ctx context.Context, req *user.GetRequest) (*user.GetResponse, error) {
-	builderSelect := sq.Select("id", "email", "name", "role", "created_at", "updated_at").
+	builderSelect := sq.Select(idColumn, emailColumn, nameColumn, roleColumn, createdAtColumn, updatedAtColumn).
 		From(userTable).
-		Where(sq.Eq{"id": req.Id}).
+		Where(sq.Eq{idColumn: req.Id}).
 		PlaceholderFormat(sq.Dollar).
 		OrderBy("id ASC")
 
 	query, args, err := builderSelect.ToSql()
 	if err != nil {
-		log.Fatalf("failed to build query: %v", err)
+		return nil, errors.Errorf("failed to build query: %v", err)
 	}
 
 	rows := s.pool.QueryRow(ctx, query, args...)
@@ -48,7 +58,7 @@ func (s *server) Get(ctx context.Context, req *user.GetRequest) (*user.GetRespon
 
 	err = rows.Scan(&id, &email, &name, &role, &createdAt, &updatedAt)
 	if err != nil {
-		log.Fatalf("failed to scan user: %v", err)
+		return nil, errors.Errorf("failed to scan user: %v", err)
 	}
 
 	return &user.GetResponse{
@@ -68,20 +78,20 @@ func (s *server) Get(ctx context.Context, req *user.GetRequest) (*user.GetRespon
 func (s *server) Create(ctx context.Context, req *user.CreateRequest) (*user.CreateResponse, error) {
 	builderInsert := sq.Insert(userTable).
 		PlaceholderFormat(sq.Dollar).
-		Columns("email", "name", "role", "password", "updated_at", "created_at").
+		Columns(emailColumn, nameColumn, roleColumn, passwordColumn, updatedAtColumn, createdAtColumn).
 		Values(req.Info.Email, req.Info.Name, req.Info.Role, req.Password, time.Now(), time.Now()).
 		Suffix("RETURNING id")
 	log.Printf("Context: %v", ctx)
 
 	query, args, err := builderInsert.ToSql()
 	if err != nil {
-		log.Fatalf("failed to build query: %v", err)
+		return nil, errors.Errorf("failed to build query: %v", err)
 	}
 
 	var userID int64
 	err = s.pool.QueryRow(ctx, query, args...).Scan(&userID)
 	if err != nil {
-		log.Fatalf("failed to insert user: %v", err)
+		return nil, errors.Errorf("failed to insert user: %v", err)
 	}
 
 	log.Printf("inserted user with id: %d", userID)
@@ -94,8 +104,8 @@ func (s *server) Create(ctx context.Context, req *user.CreateRequest) (*user.Cre
 func (s *server) Update(ctx context.Context, req *user.UpdateRequest) (*emptypb.Empty, error) {
 	builderUpdate := sq.Update(userTable).
 		PlaceholderFormat(sq.Dollar).
-		Set("updated_at", time.Now()).
-		Where(sq.Eq{"id": req.Id})
+		Set(updatedAtColumn, time.Now()).
+		Where(sq.Eq{idColumn: req.Id})
 
 	if req.Info.Email != nil {
 		builderUpdate = builderUpdate.Set("email", req.Info.Email.Value)
@@ -109,17 +119,17 @@ func (s *server) Update(ctx context.Context, req *user.UpdateRequest) (*emptypb.
 		builderUpdate = builderUpdate.Set("role", req.Info.Role)
 	}
 
-	builderUpdate.Where(sq.Eq{"id": req.Id})
+	builderUpdate.Where(sq.Eq{idColumn: req.Id})
 
 	query, args, err := builderUpdate.ToSql()
 	if err != nil {
-		log.Fatalf("failed to build query: %v", err)
+		return nil, errors.Errorf("failed to build query: %v", err)
 	}
 
 	_, err = s.pool.Exec(ctx, query, args...)
 
 	if err != nil {
-		log.Fatalf("failed to update user: %v", err)
+		return nil, errors.Errorf("failed to update user: %v", err)
 	}
 
 	return nil, nil
@@ -128,17 +138,17 @@ func (s *server) Update(ctx context.Context, req *user.UpdateRequest) (*emptypb.
 func (s *server) Delete(ctx context.Context, req *user.DeleteRequest) (*emptypb.Empty, error) {
 	builderDelete := sq.Delete(userTable).
 		PlaceholderFormat(sq.Dollar).
-		Where(sq.Eq{"id": req.Id})
+		Where(sq.Eq{idColumn: req.Id})
 
 	query, args, err := builderDelete.ToSql()
 	if err != nil {
-		log.Fatalf("failed to build query: %v", err)
+		return nil, errors.Errorf("failed to build query: %v", err)
 	}
 
 	_, err = s.pool.Exec(ctx, query, args...)
 
 	if err != nil {
-		log.Fatalf("failed to delete user: %v", err)
+		return nil, errors.Errorf("failed to delete user: %v", err)
 	}
 
 	return nil, nil

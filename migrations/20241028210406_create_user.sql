@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE table "user"
+create table "user"
 (
     id         serial primary key,
     name       text      not null,
